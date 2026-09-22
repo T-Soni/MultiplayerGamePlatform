@@ -1,0 +1,12 @@
+{
+  "name": "multiplayer-game-platform",
+  "version": "1.0.0",
+  "description": "Hybrid Microservice and Event-Driven multiplayer game platform for real-time Tic-Tac-Toe",
+  "private": true,
+  "scripts": {
+    "install:all": "node scripts/install-all.js",
+    "start": "node start-dev.js",
+    "dev": "node start-dev.js",
+    "test": "node test/integration-test.js"
+  }
+}

@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: game_platform_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    container_name: auth_service
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - JWT_SECRET=super_secret_game_jwt_key_2026
+      - DB_FILE=/data/auth.sqlite
+    volumes:
+      - auth_data:/data
+    restart: unless-stopped
+
+  registry-service:
+    build:
+      context: ./services/registry-service
+    container_name: registry_service
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - DB_FILE=/data/registry.sqlite
+    volumes:
+      - registry_data:/data
+    restart: unless-stopped
+
+  matchmaking-service:
+    build:
+      context: ./services/matchmaking-service
+    container_name: matchmaking_service
+    ports:
+      - "5003:5003"
+    environment:
+      - PORT=5003
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  game-engine:
+    build:
+      context: ./services/game-engine
+    container_name: game_engine
+    ports:
+      - "5004:5004"
+    environment:
+      - PORT=5004
+      - REDIS_URL=redis://redis:6379
+      - REGISTRY_SERVICE_URL=http://registry-service:5002
+    depends_on:
+      redis:
+        condition: service_healthy
+      registry-service:
+        condition: service_started
+    restart: unless-stopped
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+    container_name: analytics_service
+    ports:
+      - "5005:5005"
+    environment:
+      - PORT=5005
+      - REDIS_URL=redis://redis:6379
+      - REGISTRY_SERVICE_URL=http://registry-service:5002
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - DB_FILE=/data/analytics.sqlite
+    depends_on:
+      redis:
+        condition: service_healthy
+      registry-service:
+        condition: service_started
+    volumes:
+      - analytics_data:/data
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    container_name: api_gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - REGISTRY_SERVICE_URL=http://registry-service:5002
+      - MATCHMAKING_SERVICE_URL=http://matchmaking-service:5003
+      - GAME_ENGINE_URL=http://game-engine:5004
+      - ANALYTICS_SERVICE_URL=http://analytics-service:5005
+    depends_on:
+      - auth-service
+      - registry-service
+      - matchmaking-service
+      - game-engine
+      - analytics-service
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: game_frontend
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_GATEWAY_URL=http://localhost:5000
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+volumes:
+  auth_data:
+  registry_data:
+  analytics_data:
